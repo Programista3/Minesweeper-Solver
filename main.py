@@ -3,67 +3,105 @@ import cv2
 from scipy.special import expit
 from PIL import ImageGrab
 
-class Image:
+import time
+
+class Screen:
     def takeScreenShot(self):
-        self.image = np.array(ImageGrab.grab())
-        self.img2 = self.image.copy()
+        return np.array(ImageGrab.grab())
+
+class Image:
+    def __init__(self, image):
+        self.image = image
 
     def toHSV(self):
         self.image = cv2.cvtColor(self.image, cv2.COLOR_BGR2HSV)
+        return self
 
     def extractBlack(self):
         lowerBlack = np.array([0,0,0])
         upperBlack = np.array([180,255,60])
         self.image = cv2.inRange(self.image, lowerBlack, upperBlack)
+        return self
 
     def detectEdges(self):
         self.image = cv2.Canny(self.image, 100, 200)
+        return self
     
     def dilate(self):
         self.image = cv2.dilate(self.image, np.ones((3,3), np.uint8), iterations=1)
+        return self
 
     def erode(self):
         self.image = cv2.erode(self.image, np.ones((3,3), np.uint8), iterations = 1)
+        return self
 
     def findLines(self):
-        lines = cv2.HoughLines(self.image, 1, np.pi/180, 300)
-        image = self.img2.copy()
-        for line in lines:
-            rho, theta = line[0][0], line[0][1]
-            a = np.cos(theta)
-            b = np.sin(theta)
-            x0 = a*rho
-            y0 = b*rho
-            x1 = int(x0 + 1500*(-b))
-            y1 = int(y0 + 1000*(a))
-            x2 = int(x0 - 1500*(-b))
-            y2 = int(y0 - 1000*(a))
-            cv2.line(image,(x1,y1),(x2,y2),(0,0,255),2)
-        print("Znaleziono linii:", len(lines))
-        cv2.imshow('test2', image)
-        cv2.waitKey(0)
-        return lines
-
-    def removeNegativeLines(self):
-        pass
-
-    def removeSimilarLines(self):
-        pass
-
-    def sortLines(self):
-        pass
+        return cv2.HoughLines(self.image, 1, np.pi/180, 300)
 
     def classifyFields(self):
         pass
 
+class Lines:
+    def __init__(self, lines):
+        self.lines = lines
+
+    def removeNegativeLines(self):
+        toRemove = []
+
+        for i in range(len(self.lines)):
+            rho, theta = self.lines[i][0]
+            if(rho < 0):
+                toRemove.append(i)
+        self.lines = np.delete(self.lines, toRemove, axis=0)
+        return self
+
+    def removeSimilarLines(self):
+        rho_treshold = 30
+        theta_threshold = 0.1
+        similarLines = []
+
+        for i in range(len(self.lines)-1):
+            if(i in similarLines):
+                continue
+            for j in range(i+1, len(self.lines)):
+                if(j in similarLines):
+                    continue
+                rho_i, theta_i = self.lines[i][0]
+                rho_j, theta_j = self.lines[j][0]
+                if(abs(abs(rho_i)-abs(rho_j)) < rho_treshold and abs(theta_i-theta_j) < theta_threshold):
+                    similarLines.append(j)
+        self.lines = np.delete(self.lines, similarLines, axis=0)
+        return self
+
+    def sortLines(self, imageShape):
+        horizontalLines = []
+        verticalLines = []
+        for line in self.lines:
+            rho, theta = line[0]
+            if(theta < 1):
+                verticalLines.append(rho)
+            elif(rho > 50 and rho < imageShape[0]-50):
+                horizontalLines.append(rho)
+        horizontalLines.sort()
+        verticalLines.sort()
+        verticalLines.pop(0)
+        verticalLines.pop()
+        return list(map(int, horizontalLines)), list(map(int, verticalLines))
+
+class MinesweeperSolver:
+    def preprocessing(self):
+        screen = Screen()
+        screenshot = screen.takeScreenShot()
+        image = Image(screenshot)
+        image.toHSV().extractBlack().detectEdges().dilate().erode()
+        lines = Lines(image.findLines())
+        lines.removeNegativeLines().removeSimilarLines()
+        horizontalLines, verticalLines = lines.sortLines(screenshot.shape)
+        return horizontalLines, verticalLines
+
+    def classifyFields(self, image, horizontalLines, verticalLines):
+        pass
+
 if __name__ == '__main__':
-    img = Image()
-    img.takeScreenShot()
-    img.toHSV()
-    img.extractBlack()
-    img.detectEdges()
-    img.dilate()
-    img.erode()
-    img.findLines()
-    cv2.imshow('test', img.image)
-    cv2.waitKey(0)
+    minesweeper = MinesweeperSolver()
+    minesweeper.preprocessing()
