@@ -88,6 +88,47 @@ class Lines:
         verticalLines.pop()
         return list(map(int, horizontalLines)), list(map(int, verticalLines))
 
+class Classifier:
+    def __init__(self, filename):
+        self.loadModel(filename)
+    
+    def loadModel(self, filename):
+        data = np.load(filename)
+        self.n_features = data['header'][0]
+        self.n_hidden = data['header'][1]
+        self.n_output = data['header'][2]
+        self.w1 = data['w1']
+        self.w2 = data['w2']
+
+    def predict(self, image):
+        inputWithBiasUnit, sumForHiddenLayer, activationForHiddenLayer, sumForOutputLayer, activationForOutputLayer = self.feedForward(image)
+        return np.argmax(sumForOutputLayer, axis=0)
+
+    def imageTo1D(self, image):
+        return np.reshape(image, image.shape[0]*image.shape[1])
+
+    def feedForward(self, x):
+        inputWithBiasUnit = self.addBiasUnitColumn(x)
+        sumForHiddenLayer = self.w1.dot(inputWithBiasUnit.T)
+        activationForHiddenLayer = self.sigmoid(sumForHiddenLayer)
+        activationForHiddenLayer = self.addBiasUnitRow(activationForHiddenLayer)
+        sumForOutputLayer = self.w2.dot(activationForHiddenLayer)
+        activationForOutputLayer = self.sigmoid(sumForOutputLayer)
+        return inputWithBiasUnit, sumForHiddenLayer, activationForHiddenLayer, sumForOutputLayer, activationForOutputLayer
+
+    def sigmoid(self, z):
+        return expit(z)
+
+    def addBiasUnitColumn(self, x):
+        xWithBiasUnit = np.ones((x.shape[0], x.shape[1]+1))
+        xWithBiasUnit[:, 1:] = x
+        return xWithBiasUnit
+
+    def addBiasUnitRow(self, x):
+        xWithBiasUnit = np.ones((x.shape[0]+1, x.shape[1]))
+        xWithBiasUnit[1:, :] = x
+        return xWithBiasUnit
+
 class MinesweeperSolver:
     def preprocessing(self):
         screen = Screen()
@@ -100,8 +141,17 @@ class MinesweeperSolver:
         return horizontalLines, verticalLines
 
     def classifyFields(self, image, horizontalLines, verticalLines):
-        pass
+        classifier = Classifier('model.npz')
+        samples = []
+        for i in range(0, len(horizontalLines)-1):
+			for j in range(0, len(verticalLines)-1):
+				field = image[horizontalLines[i]:horizontalLines[i+1], verticalLines[j]:verticalLines[j+1]]
+				field = cv2.resize(field, (16,16))
+				samples.append(classifier.imageTo1D(field))
+        print(len(samples))
+        #...
 
 if __name__ == '__main__':
     minesweeper = MinesweeperSolver()
-    minesweeper.preprocessing()
+    horizontalLines, verticalLines = minesweeper.preprocessing()
+    #board = minesweeper.classifyFields()
