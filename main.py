@@ -191,13 +191,16 @@ class MinesweeperSolver:
     def solve(self):
         mouse = Mouse()
         mouse.clickLeft(100, 100)
+        pause = 0.05
         while(True):
             #start = time.time()
             screen = Screen()
             screenshot = screen.takeScreenShot()
-            horizontalLines, verticalLines = minesweeper.preprocessing(screenshot)
             screenshotGray = Image(screenshot)
             screenshotGray.toGray()
+            if(self.isOver(screenshotGray.get())):
+                break
+            horizontalLines, verticalLines = minesweeper.preprocessing(screenshot)
             board = Board(minesweeper.classifyFields(screenshotGray.get(), horizontalLines, verticalLines))
             toMark, toDiscover = board.findMoves()
             #end = time.time()
@@ -207,13 +210,22 @@ class MinesweeperSolver:
             for field in toDiscover:
                 x, y, w, h, = self.getFieldPositionAndSize(field[0], field[1], horizontalLines, verticalLines)
                 mouse.clickLeft(round(x+w/2), round(y+h/2))
-                time.sleep(0.03)
+                time.sleep(pause)
             for field in toMark:
                 x, y, w, h, = self.getFieldPositionAndSize(field[0], field[1], horizontalLines, verticalLines)
                 mouse.clickRight(round(x+w/2), round(y+h/2))
-                time.sleep(0.03)
+                time.sleep(pause)
             mouse.moveTo(10,10)
         print("Koniec")
+
+    def isOver(self, screenshot):
+        template = cv2.imread('end.png', 0)
+        res = cv2.matchTemplate(screenshot, template, cv2.TM_CCOEFF_NORMED)
+        minVal, maxVal, minLoc, maxLoc = cv2.minMaxLoc(res)
+        if(maxVal > 0.9):
+            return True
+        else:
+            return False
 
     def preprocessing(self, screenshot):
         image = Image(screenshot)
