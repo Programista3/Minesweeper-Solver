@@ -167,12 +167,15 @@ class Board:
                     marked, undiscovered = self.findMarkedAndUndiscovered(x+1,y+1)
                     if(len(marked) == self.board[y][x] and len(undiscovered) > 0):
                         #print("Odkrywanie",x,y,"\n",self.board)
+                        print("Odkrywanie",x,y)
                         toDiscover.update(undiscovered)
                     elif(len(undiscovered) == self.board[y][x] and len(marked) == 0):
                         #print("Oznaczanie 1",x,y,"\n",self.board)
+                        print("Oznaczanie 1",x,y)
                         toMark.update(undiscovered)
                     elif(len(marked) + len(undiscovered) == self.board[y][x] and len(undiscovered) > 0):
                         #print("Oznaczanie 2",x,y,"\n",self.board)
+                        print("Oznaczanie 2",x,y)
                         toMark.update(undiscovered)
         return toMark, toDiscover
 
@@ -191,41 +194,73 @@ class MinesweeperSolver:
     def solve(self):
         mouse = Mouse()
         mouse.clickLeft(100, 100)
-        pause = 0.05
+        pause = 0.1
+        checkPos = False
+        pos = {'x': 0, 'y': 0}
         while(True):
             #start = time.time()
             screen = Screen()
             screenshot = screen.takeScreenShot()
+            #cv2.imshow('test', screenshot)
+            #cv2.waitKey(0)
             screenshotGray = Image(screenshot)
             screenshotGray.toGray()
             if(self.isOver(screenshotGray.get())):
                 break
             horizontalLines, verticalLines = minesweeper.preprocessing(screenshot)
+            print("Linie", len(horizontalLines), len(verticalLines))
             board = Board(minesweeper.classifyFields(screenshotGray.get(), horizontalLines, verticalLines))
+            if(checkPos):
+                print("a", x, y)
+                print("x", board.board[y][x])
+                checkPos = False
+                cv2.imwrite('screen.png', screenshotGray.get())
+                if(board.board[y][x] == 7 or board.board[y][x] == 9):
+                    print("Bomba")
+                    break
+                #continue
             toMark, toDiscover = board.findMoves()
             #end = time.time()
             #print(end-start)
             if(len(toMark) == 0 and len(toDiscover) == 0):
-                break
-            for field in toDiscover:
-                x, y, w, h, = self.getFieldPositionAndSize(field[0], field[1], horizontalLines, verticalLines)
-                mouse.clickLeft(round(x+w/2), round(y+h/2))
-                time.sleep(pause)
-            for field in toMark:
-                x, y, w, h, = self.getFieldPositionAndSize(field[0], field[1], horizontalLines, verticalLines)
-                mouse.clickRight(round(x+w/2), round(y+h/2))
-                time.sleep(pause)
+                while(True):
+                    y = np.random.choice(board.board.shape[0], 1)[0]
+                    x = np.random.choice(board.board.shape[1], 1)[0]
+                    if(board.board[y,x] == 7):
+                        print("Wylosowano:", x, y)
+                        fieldX, fieldY, fieldWidth, fieldHeight, = self.getFieldPositionAndSize(x, y, horizontalLines, verticalLines)
+                        mouse.clickLeft(round(fieldX+fieldWidth/2), round(fieldY+fieldHeight/2))
+                        checkPos = True
+                        pos[x] = x
+                        pos[y] = y
+                        time.sleep(pause)
+                        break
+            else:
+                for field in toDiscover:
+                    x, y, w, h, = self.getFieldPositionAndSize(field[0], field[1], horizontalLines, verticalLines)
+                    mouse.clickLeft(round(x+w/2), round(y+h/2))
+                    time.sleep(pause)
+                for field in toMark:
+                    x, y, w, h, = self.getFieldPositionAndSize(field[0], field[1], horizontalLines, verticalLines)
+                    mouse.clickRight(round(x+w/2), round(y+h/2))
+                    time.sleep(pause)
             mouse.moveTo(10,10)
         print("Koniec")
 
     def isOver(self, screenshot):
         template = cv2.imread('end.png', 0)
+        templateWin = cv2.imread('win.png', 0)
         res = cv2.matchTemplate(screenshot, template, cv2.TM_CCOEFF_NORMED)
         minVal, maxVal, minLoc, maxLoc = cv2.minMaxLoc(res)
         if(maxVal > 0.9):
             return True
         else:
-            return False
+            res = cv2.matchTemplate(screenshot, templateWin, cv2.TM_CCOEFF_NORMED)
+            minVal, maxVal, minLoc, maxLoc = cv2.minMaxLoc(res)
+            if(maxVal > 0.9):
+                return True
+            else:
+                return False
 
     def preprocessing(self, screenshot):
         image = Image(screenshot)
