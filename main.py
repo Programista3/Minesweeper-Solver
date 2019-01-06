@@ -6,6 +6,7 @@ import win32api
 import win32con
 
 import time
+import os
 
 class Screen:
     def takeScreenShot(self):
@@ -45,7 +46,7 @@ class Image:
         return self
 
     def findLines(self):
-        return cv2.HoughLines(self.image, 1, np.pi/180, 300)
+        return cv2.HoughLines(self.image, 1, np.pi/180, 280)
 
     def classifyFields(self):
         pass
@@ -96,6 +97,23 @@ class Lines:
         verticalLines.pop(0)
         verticalLines.pop()
         return list(map(int, horizontalLines)), list(map(int, verticalLines))
+
+    def checkCorrectness(self, horizontalLines, verticalLines):
+        differences = []
+        for i in range(len(horizontalLines)-1):
+            differences.append(horizontalLines[i+1]-horizontalLines[i])
+        average = sum(differences)/len(differences)
+        for i in range(len(horizontalLines)-1):
+            if(horizontalLines[i+1]-horizontalLines[i] > 1.5*average):
+                horizontalLines.append(int(horizontalLines[i]+(horizontalLines[i+1]-horizontalLines[i])/2))
+                print("Dodano h")
+        for i in range(len(verticalLines)-1):
+            if(verticalLines[i+1]-verticalLines[i] > 1.5*average):
+                verticalLines.append(int(verticalLines[i]+(verticalLines[i+1]-verticalLines[i])/2))
+                print("Dodano w")
+        horizontalLines.sort()
+        verticalLines.sort()
+        return horizontalLines, verticalLines
 
 class Classifier:
     def __init__(self, filename):
@@ -191,10 +209,23 @@ class Board:
         return marked, undiscovered
 
 class MinesweeperSolver:
+    def nextIndexInDir(self, dir):
+        for root, dirs, files in os.walk(dir):
+            files = [filename.split('.')[0] for filename in files]
+            indexes = list(map(int, files))
+            return 0 if not indexes else max(indexes)+1
+
+    def undiscoveredExists(self, board):
+        for i in range(len(board)):
+            for j in range(len(board[0])):
+                if(board[i][j] == 7):
+                    return True
+        return False
+
     def solve(self):
         mouse = Mouse()
         mouse.clickLeft(100, 100)
-        pause = 0.1
+        pause = 0.05
         checkPos = False
         pos = {'x': 0, 'y': 0}
         while(True):
@@ -208,6 +239,12 @@ class MinesweeperSolver:
             if(self.isOver(screenshotGray.get())):
                 break
             horizontalLines, verticalLines = minesweeper.preprocessing(screenshot)
+            #image = screenshotGray.get().copy()
+            """for line in horizontalLines:
+                cv2.line(image,(0,line),(1000, line),(255,255,0),2)
+            for line in verticalLines:
+                cv2.line(image,(line, 0),(line, 800),(255,255,0),2)"""
+            #cv2.imwrite('sc/'+str(self.nextIndexInDir('sc'))+'.png', image)
             print("Linie", len(horizontalLines), len(verticalLines))
             board = Board(minesweeper.classifyFields(screenshotGray.get(), horizontalLines, verticalLines))
             if(checkPos):
@@ -223,18 +260,22 @@ class MinesweeperSolver:
             #end = time.time()
             #print(end-start)
             if(len(toMark) == 0 and len(toDiscover) == 0):
-                while(True):
-                    y = np.random.choice(board.board.shape[0], 1)[0]
-                    x = np.random.choice(board.board.shape[1], 1)[0]
-                    if(board.board[y,x] == 7):
-                        print("Wylosowano:", x, y)
-                        fieldX, fieldY, fieldWidth, fieldHeight, = self.getFieldPositionAndSize(x, y, horizontalLines, verticalLines)
-                        mouse.clickLeft(round(fieldX+fieldWidth/2), round(fieldY+fieldHeight/2))
-                        checkPos = True
-                        pos[x] = x
-                        pos[y] = y
-                        time.sleep(pause)
-                        break
+                if(self.undiscoveredExists(board.board)):
+                    while(True):
+                        y = np.random.choice(board.board.shape[0], 1)[0]
+                        x = np.random.choice(board.board.shape[1], 1)[0]
+                        if(board.board[y,x] == 7):
+                            print("Wylosowano:", x, y)
+                            fieldX, fieldY, fieldWidth, fieldHeight, = self.getFieldPositionAndSize(x, y, horizontalLines, verticalLines)
+                            mouse.clickLeft(round(fieldX+fieldWidth/2), round(fieldY+fieldHeight/2))
+                            checkPos = True
+                            pos[x] = x
+                            pos[y] = y
+                            time.sleep(pause)
+                            break
+                else:
+                    print("Cała plansza rozwiązana")
+                    break
             else:
                 for field in toDiscover:
                     x, y, w, h, = self.getFieldPositionAndSize(field[0], field[1], horizontalLines, verticalLines)
@@ -268,6 +309,7 @@ class MinesweeperSolver:
         lines = Lines(image.findLines())
         lines.removeNegativeLines().removeSimilarLines()
         horizontalLines, verticalLines = lines.sortLines(screenshot.shape)
+        horizontalLines, verticalLines = lines.checkCorrectness(horizontalLines, verticalLines)
         return horizontalLines, verticalLines
 
     def classifyFields(self, image, horizontalLines, verticalLines):
